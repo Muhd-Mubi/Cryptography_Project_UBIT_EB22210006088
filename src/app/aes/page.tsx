@@ -317,7 +317,7 @@ export default function AesCipherPage() {
           const blockToEncrypt = xorUint8Arrays(currentPlaintextBlock, previousCipherBlock);
           const encryptedBlock = aesEncryptBlock(blockToEncrypt, roundKeys, Nr);
           encryptedBlocksArray.push(encryptedBlock);
-          previousCipherBlock = encryptedBlock;
+          previousCipherBlock = Uint8Array.from(encryptedBlock);
         }
         
         outputBytesTotal = Uint8Array.from([...iv, ...encryptedBlocksArray.reduce((acc, val) => Uint8Array.from([...acc, ...val]), new Uint8Array(0))]);
