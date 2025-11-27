@@ -98,7 +98,7 @@ function pkcs7Unpad(data: Uint8Array): Uint8Array | null {
   if (data.length === 0) return null;
   const paddingLength = data[data.length - 1];
   if (paddingLength === 0 || paddingLength > data.length || paddingLength > BLOCK_SIZE) return null;
-  for (let i = data.length - paddingLength; i < data.length -1; i++) {
+  for (let i = data.length - paddingLength; i < data.length; i++) {
     if (data[i] !== paddingLength) return null;
   }
   return data.slice(0, data.length - paddingLength);
@@ -139,6 +139,22 @@ function xtime(x: number): number {
   return ((x << 1) ^ ((x & 0x80) ? 0x1b : 0x00)) & 0xff;
 }
 
+const gmul = (a: number, b: number): number => {
+    let p = 0;
+    for (let counter = 0; counter < 8; counter++) {
+        if ((b & 1) !== 0) {
+            p ^= a;
+        }
+        const hi_bit_set = (a & 0x80) !== 0;
+        a <<= 1;
+        if (hi_bit_set) {
+            a ^= 0x1b; /* x^8 + x^4 + x^3 + x + 1 */
+        }
+        b >>= 1;
+    }
+    return p;
+};
+
 function mixColumns(state: Uint8Array, isInv: boolean): void {
   for (let c = 0; c < Nb; c++) { // Nb is 4 for AES
     const colOffset = c * Nb;
@@ -148,15 +164,15 @@ function mixColumns(state: Uint8Array, isInv: boolean): void {
     const s3 = state[colOffset + 3];
 
     if (isInv) {
-      state[colOffset + 0] = xtime(xtime(xtime(xtime(s0))^xtime(xtime(s0)))^xtime(xtime(s1))^xtime(xtime(s1))^xtime(s1))^xtime(xtime(xtime(s2))^xtime(s2))^xtime(xtime(xtime(s3))^xtime(xtime(s3))^s3);
-      state[colOffset + 1] = xtime(xtime(xtime(s0))^xtime(xtime(s0))^s0)^xtime(xtime(xtime(xtime(s1)))^xtime(xtime(s1)))^xtime(xtime(s2))^xtime(xtime(s2))^xtime(s2)^xtime(xtime(xtime(s3))^xtime(s3));
-      state[colOffset + 2] = xtime(xtime(xtime(s0))^xtime(s0))^xtime(xtime(xtime(s1))^xtime(xtime(s1))^s1)^xtime(xtime(xtime(xtime(s2)))^xtime(xtime(s2)))^xtime(xtime(s3))^xtime(xtime(s3))^xtime(s3);
-      state[colOffset + 3] = xtime(xtime(xtime(s0))^xtime(xtime(s0))^xtime(s0))^xtime(xtime(xtime(s1))^xtime(s1))^xtime(xtime(xtime(s2))^xtime(xtime(s2))^s2)^xtime(xtime(xtime(xtime(s3)))^xtime(xtime(s3)));
+      state[colOffset + 0] = gmul(s0, 0x0e) ^ gmul(s1, 0x0b) ^ gmul(s2, 0x0d) ^ gmul(s3, 0x09);
+      state[colOffset + 1] = gmul(s0, 0x09) ^ gmul(s1, 0x0e) ^ gmul(s2, 0x0b) ^ gmul(s3, 0x0d);
+      state[colOffset + 2] = gmul(s0, 0x0d) ^ gmul(s1, 0x09) ^ gmul(s2, 0x0e) ^ gmul(s3, 0x0b);
+      state[colOffset + 3] = gmul(s0, 0x0b) ^ gmul(s1, 0x0d) ^ gmul(s2, 0x09) ^ gmul(s3, 0x0e);
     } else {
-      state[colOffset + 0] = xtime(s0) ^ (xtime(s1) ^ s1) ^ s2 ^ s3;
-      state[colOffset + 1] = s0 ^ xtime(s1) ^ (xtime(s2) ^ s2) ^ s3;
-      state[colOffset + 2] = s0 ^ s1 ^ xtime(s2) ^ (xtime(s3) ^ s3);
-      state[colOffset + 3] = (xtime(s0) ^ s0) ^ s1 ^ s2 ^ xtime(s3);
+      state[colOffset + 0] = gmul(s0, 2) ^ gmul(s1, 3) ^ s2 ^ s3;
+      state[colOffset + 1] = s0 ^ gmul(s1, 2) ^ gmul(s2, 3) ^ s3;
+      state[colOffset + 2] = s0 ^ s1 ^ gmul(s2, 2) ^ gmul(s3, 3);
+      state[colOffset + 3] = gmul(s0, 3) ^ s1 ^ s2 ^ gmul(s3, 2);
     }
   }
 }
@@ -301,7 +317,7 @@ export default function AesCipherPage() {
           const blockToEncrypt = xorUint8Arrays(currentPlaintextBlock, previousCipherBlock);
           const encryptedBlock = aesEncryptBlock(blockToEncrypt, roundKeys, Nr);
           encryptedBlocksArray.push(encryptedBlock);
-          previousCipherBlock = new Uint8Array((encryptedBlock.buffer as ArrayBuffer).slice(0));
+          previousCipherBlock = encryptedBlock;
         }
         
         outputBytesTotal = Uint8Array.from([...iv, ...encryptedBlocksArray.reduce((acc, val) => Uint8Array.from([...acc, ...val]), new Uint8Array(0))]);
@@ -429,5 +445,3 @@ export default function AesCipherPage() {
     </div>
   );
 }
-
-    
